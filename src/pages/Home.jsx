@@ -3,9 +3,11 @@ import { app } from '../firebase'
 import { useState } from 'react'
 import { nanoid } from 'nanoid'
 import { ref, uploadBytes, getDownloadURL, getStorage } from 'firebase/storage'
+import imageCompression from 'browser-image-compression' // Import image compression library
 import InputOptions from '../components/InputOptions'
 import { toast } from 'react-toastify'
 import { Outlet, redirect } from 'react-router-dom'
+
 const continents = ['Europe', 'Asia', 'Africa', 'North America']
 const categories = [
   'Islands',
@@ -16,9 +18,10 @@ const categories = [
   'Amazing pools',
   'Castles',
 ]
+
 const Home = () => {
   const db = getFirestore(app)
-  const storage = getStorage(app) // Importing storage correctly
+  const storage = getStorage(app)
   const [continent, setContinent] = useState('')
   const [category, setCategory] = useState('')
   const [description, setDescription] = useState('')
@@ -28,11 +31,30 @@ const Home = () => {
   const [subImages, setSubImages] = useState([null, null, null])
   const [price, setPrice] = useState('')
 
+  // Function to handle image compression
+  const compressImage = async (image) => {
+    const options = {
+      maxSizeMB: 1, // Max file size in MB
+      maxWidthOrHeight: 800, // Max width/height in pixels
+      useWebWorker: true,
+    }
+
+    try {
+      const compressedFile = await imageCompression(image, options)
+      return compressedFile
+    } catch (error) {
+      console.error('Error compressing image:', error)
+      return image // Return the original image if compression fails
+    }
+  }
+
   const handleImageUpload = async (image, path) => {
+    const compressedImage = await compressImage(image) // Compress the image before uploading
     const imageRef = ref(storage, path)
-    await uploadBytes(imageRef, image)
+    await uploadBytes(imageRef, compressedImage)
     return getDownloadURL(imageRef)
   }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (
@@ -52,6 +74,7 @@ const Home = () => {
     try {
       const mainImagePath = `items/main_${Date.now()}`
       const mainURL = await handleImageUpload(mainImage, mainImagePath)
+
       const subURLs = await Promise.all(
         subImages.map(async (image, index) => {
           if (image) {
@@ -61,6 +84,7 @@ const Home = () => {
           return null
         })
       )
+
       const data = await addDoc(collection(db, `data`), {
         id: nanoid(),
         name: name,
@@ -72,6 +96,7 @@ const Home = () => {
         mainImageURL: mainURL,
         subImageURLs: subURLs.filter((url) => url !== null),
       })
+
       if (data) {
         toast.success('successfully added')
         setContinent('')
@@ -80,9 +105,7 @@ const Home = () => {
         setCountry('')
         setCategory('')
         setDescription('')
-        setSubImages(() => {
-          return [null, null, null]
-        })
+        setSubImages([null, null, null])
         setMainImage(null)
         setTimeout(() => {
           location.reload()
@@ -91,7 +114,7 @@ const Home = () => {
     } catch (e) {
       console.error('Error adding document: ', e)
       alert('An error occurred while adding the item. Please try again.')
-      toast.error(e)
+      toast.error(e.message || 'An error occurred')
     }
   }
 
@@ -165,7 +188,7 @@ const Home = () => {
           />
           <textarea
             className='input bg-base-200 h-24'
-            placeholder='describe your place here'
+            placeholder='Describe your place here'
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
@@ -177,4 +200,5 @@ const Home = () => {
     </div>
   )
 }
+
 export default Home
